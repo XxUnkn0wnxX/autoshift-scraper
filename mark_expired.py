@@ -1,3 +1,4 @@
+import os
 import argparse
 import json
 from datetime import datetime, timezone, timedelta
@@ -17,8 +18,7 @@ except Exception:
     from backports.zoneinfo import ZoneInfo  # type: ignore
 
 GEARBOX_TZ = ZoneInfo("America/Chicago")
-SHIFTCODESJSONPATH = "data/shiftcodes.json"
-
+SHIFTCODESJSONPATH = os.environ.get("SHIFTCODESJSONPATH", "data/shiftcodes.json")
 
 # -------------------------
 # GitHub upload helper

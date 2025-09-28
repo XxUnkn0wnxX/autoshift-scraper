@@ -49,47 +49,69 @@ python ./autoshift_scraper.py --user GITHUB_USERNAME --repo GITHUB_REPOSITORY_NA
 python ./autoshift_scraper.py --schedule 5 # redeem every 5 hours
 ```
 
+# Docker & Kubernetes Usage (updated)
+
 ## Docker Use
 
-The following docker environment variables are in use: 
+The scraper now supports environment-backed defaults for CLI flags. You can run it using only environment variables.
 
-| Environment Variable | Use |
-| -------------------- | --- |
-| GITHUB_USER | The username that owns the GitHub repo to commit to | 
-| GITHUB_REPO | The name of the GitHub repository to commit to
-| GITHUB_TOKEN | The GitHub fine-grained personal access token -- see below for more details | 
-| PARSER_ARGS | (Optional) Additional parameters to pass in, like "--schedule 2 --verbose" |
+### Environment variables
 
-Example: 
-``` bash
-docker run -d -t -i \
--e GITHUB_USER='ugoogalizer' \ 
--e GITHUB_REPO='autoshift-codes' \
--e GITHUB_TOKEN='github_pat_***' \
--e PARSER_ARGS='--verbose --schedule 2' \
--v autoshift:/autoshift/data \
---name autoshift-scraper \
-zacharmstrong/autoshift-scraper:latest
+| Environment Variable  | Purpose                                                                               | Default / Notes               |
+| --------------------- | ------------------------------------------------------------------------------------- | ----------------------------- |
+| `GITHUB_USER`         | GitHub username/org that owns the repo                                                | —                             |
+| `GITHUB_REPO`         | Repository name (e.g. `autoshift-codes`)                                              | —                             |
+| `GITHUB_TOKEN`        | GitHub PAT (fine‑grained: **Contents: Read & write** on the repo; or classic: `repo`) | —                             |
+| `SCHEDULE`            | Run interval (`"2"` = 2 hours, `"30m"` = 30 minutes)                                  | If unset, runs once and exits |
+| `SHIFTCODESJSONPATH`  | Output path for `shiftcodes.json` (inside container)                                  | `data/shiftcodes.json`        |
+| `AUTOSHIFT_PERMALINK` | Override permalink written to metadata                                                | Defaults to public raw URL    |
+| `PARSER_ARGS`         | *(Optional)* Extra flags (e.g. `--verbose --file /autoshift/data/shiftcodes.json`)    | Prepended; CLI wins           |
+
+> **Persistence tip:** Mount a volume and point `SHIFTCODESJSONPATH` (or `--file`) into that mount so the file survives container restarts.
+
+### Example (published image)
+
+```bash
+docker run -d \
+  --name autoshift-scraper \
+  -v autoshift:/autoshift/data \
+  -e GITHUB_USER='ugoogalizer' \
+  -e GITHUB_REPO='autoshift-codes' \
+  -e GITHUB_TOKEN='github_pat_***' \
+  -e SCHEDULE='2' \
+  -e SHIFTCODESJSONPATH='/autoshift/data/shiftcodes.json' \
+  -e PARSER_ARGS='--verbose' \
+  zacharmstrong/autoshift-scraper:latest
 ```
-Example localhost build image: 
-``` bash
-docker run -d -t -i \
--e GITHUB_USER='zacharmstrong' \
--e GITHUB_REPO='autoshift-codes' \
--e GITHUB_TOKEN='github_pat_***' \
--e PARSER_ARGS='--verbose --schedule 2' \
--v autoshift:/autoshift/data \
---name autoshift-scraper \
-localhost/autoshift-scraper:latest
 
+**Alternative:** keep `SHIFTCODESJSONPATH` unset and pass `--file` via `PARSER_ARGS` instead:
+
+```bash
+-e PARSER_ARGS='--verbose --schedule 2 --file /autoshift/data/shiftcodes.json'
 ```
+
+### Example (local build)
+
+```bash
+docker run -d \
+  --name autoshift-scraper \
+  -v autoshift:/autoshift/data \
+  -e GITHUB_USER='zacharmstrong' \
+  -e GITHUB_REPO='autoshift-codes' \
+  -e GITHUB_TOKEN='github_pat_***' \
+  -e SCHEDULE='2' \
+  -e SHIFTCODESJSONPATH='/autoshift/data/shiftcodes.json' \
+  -e PARSER_ARGS='--verbose' \
+  localhost/autoshift-scraper:latest
+```
+
+---
 
 ## Kubernetes Use
 
-Example Deployment file
+Example Deployment + PVC. Mount a path and either set `SHIFTCODESJSONPATH` to the mounted file or pass `--file` via `PARSER_ARGS`.
 
-``` yaml
-
+```yaml
 --- # deployment
 apiVersion: apps/v1
 kind: Deployment
@@ -97,7 +119,6 @@ metadata:
   labels:
     app: autoshift-scraper
   name: autoshift-scraper
-#  namespace: autoshift
 spec:
   selector:
     matchLabels:
@@ -122,8 +143,12 @@ spec:
                 secretKeyRef:
                   name: autoshift-scraper-secret
                   key: githubtoken
+            - name: SCHEDULE
+              value: "2"            # every 2 hours
+            - name: SHIFTCODESJSONPATH
+              value: "/autoshift/data/shiftcodes.json"
             - name: PARSER_ARGS
-              value: "--schedule 2"
+              value: "--verbose"    # optional extras
           resources:
             requests:
               cpu: 100m
@@ -132,20 +157,17 @@ spec:
               cpu: "100m"
               memory: "500Mi"
           volumeMounts:
-            - mountPath: /autoshift-scraper/data
+            - mountPath: /autoshift/data
               name: autoshift-scraper-pv
       volumes:
         - name: autoshift-scraper-pv
-          # If this is NFS backed, you may have to add the nolock mount option to the storage class
           persistentVolumeClaim:
             claimName: autoshift-scraper-pvc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
-# If this is NFS backed, you may have to add the nolock mount option to the storage class
 metadata:
   name: autoshift-scraper-pvc
-#  namespace: autoshift
 spec:
   storageClassName: managed-nfs-storage-retain
   accessModes:
@@ -153,16 +175,22 @@ spec:
   resources:
     requests:
       storage: 10Mi
+```
 
+Secrets helpers:
 
+```bash
 # kubectl create namespace autoshift
 # kubectl config set-context --current --namespace=autoshift
-# kubectl create secret generic autoshift-scraper-secret --from-literal=githubtoken='XXX' 
+kubectl create secret generic autoshift-scraper-secret \
+  --from-literal=githubtoken='XXX'
 
-# To get the username and password use: 
-# kubectl get secret autoshift-scraper-secret -o jsonpath="{.data.githubtoken}" | base64 -d
-
+# Retrieve the token
+kubectl get secret autoshift-scraper-secret \
+  -o jsonpath="{.data.githubtoken}" | base64 -d; echo
 ```
+
+**PAT Scopes:** fine‑grained → Contents: Read & write (repo must be included); classic → `repo`. If your org uses SSO, make sure the token is approved for the repo.
 
 # Configuring GitHub connectivity
 

@@ -1,19 +1,30 @@
 # Overview
-Script aimed at scraping SHiFT Codes from websites, currently all provided from the great work done at  https://mentalmars.com.  Current webpages scraped include: 
+Script aimed at scraping SHiFT Codes from websites, currently all provided from the great work done at  
+https://mentalmars.com  
+https://www.polygon.com  
+https://www.ign.com  
+https://xsmashx88x.github.io/Shift-Codes  
+
+##### Current webpages scraped include:
+
 - [Borderlands](https://mentalmars.com/game-news/borderlands-golden-keys/)
 - [Borderlands 2](https://mentalmars.com/game-news/borderlands-2-golden-keys/)
 - [Borderlands 3](https://mentalmars.com/game-news/borderlands-3-golden-keys/)
-- [Borderlands 4](https://mentalmars.com/game-news/borderlands-4-shift-codes/)
+- Borderlands 4  
+
+  > [mentalmars](https://mentalmars.com/game-news/borderlands-4-shift-codes/)
+  > [polygon](https://www.polygon.com/borderlands-4-active-shift-codes-redeem/)
+  > [ign](https://www.ign.com/wikis/borderlands-4/Borderlands_4_SHiFT_Codes)
+  > [xsmashx88x](https://xsmashx88x.github.io/Shift-Codes/)
 - [Borderlands The Pre-Sequel](https://mentalmars.com/game-news/bltps-golden-keys/)
 - [Tiny Tina's Wonderlands](https://mentalmars.com/game-news/tiny-tinas-wonderlands-shift-codes)
 
 Instead of publishing this as part of [Fabbi's autoshift](https://github.com/Fabbi/autoshift), this is aimed at publishing a machine readable file that can be hit by autoshift.  This reduces the load on mentalmars as it's likely not ok to have swarms of autoshifts scraping their website.  Instead codes are published to the repo here: 
- - https://github.com/ugoogalizer/autoshift-codes
-With a direct link here: 
- - https://raw.githubusercontent.com/ugoogalizer/autoshift-codes/main/shiftcodes.json
+- [autoshift-codes](https://github.com/zarmstrong/autoshift-codes)
 
+  > With a direct link [here](https://raw.githubusercontent.com/zarmstrong/autoshift-codes/refs/heads/main/shiftcodes.json)
 
-## Intent 
+## Intent
 
 This script has been setup with the intent that other webpages could be scraped. The Python Dictionary `webpages` can be used to customise the webpage, the tables and their contents. This may need adjusting as mentalmars' website updates over time.
 

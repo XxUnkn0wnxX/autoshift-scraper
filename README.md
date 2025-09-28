@@ -12,10 +12,7 @@ https://xsmashx88x.github.io/Shift-Codes
 - [Borderlands 3](https://mentalmars.com/game-news/borderlands-3-golden-keys/)
 - Borderlands 4  
 
-  > [mentalmars](https://mentalmars.com/game-news/borderlands-4-shift-codes/)
-  > [polygon](https://www.polygon.com/borderlands-4-active-shift-codes-redeem/)
-  > [ign](https://www.ign.com/wikis/borderlands-4/Borderlands_4_SHiFT_Codes)
-  > [xsmashx88x](https://xsmashx88x.github.io/Shift-Codes/)
+  > [mentalmars](https://mentalmars.com/game-news/borderlands-4-shift-codes/) |  [polygon](https://www.polygon.com/borderlands-4-active-shift-codes-redeem/) | [ign](https://www.ign.com/wikis/borderlands-4/Borderlands_4_SHiFT_Codes) | [xsmashx88x](https://xsmashx88x.github.io/Shift-Codes/)
 - [Borderlands The Pre-Sequel](https://mentalmars.com/game-news/bltps-golden-keys/)
 - [Tiny Tina's Wonderlands](https://mentalmars.com/game-news/tiny-tinas-wonderlands-shift-codes)
 

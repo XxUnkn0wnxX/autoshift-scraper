@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import json, base64
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from os import path, makedirs
 from pathlib import Path
 
@@ -12,6 +12,14 @@ from github import Github, InputGitTreeElement
 from github.GithubException import GithubException, UnknownObjectException
 
 from common import _L, DEBUG, DIRNAME, INFO
+
+# --- Central (Gearbox) timezone support for pretty timestamps ---
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:
+    from backports.zoneinfo import ZoneInfo  # type: ignore
+
+GEARBOX_TZ = ZoneInfo("America/Chicago")
 
 # CHANGE: Allow environment override; CLI --file still takes precedence at runtime.
 SHIFTCODESJSONPATH = os.environ.get("SHIFTCODESJSONPATH", "data/shiftcodes.json")
@@ -436,14 +444,32 @@ def generateAutoshiftJSON(website_code_tables, previous_codes, include_expired):
                         }
                     )
 
-    # Add the metadata section:
+    # Add the metadata section (machine- and human-friendly stamps)
     generatedDateAndTime = datetime.now(timezone.utc)
+
+    # Build ISO Z string and epoch ms
+    utc_iso = generatedDateAndTime.isoformat().replace("+00:00", "Z")
+    epoch_ms = int(generatedDateAndTime.timestamp() * 1000)
+
+    # Central time pretty string with correct UTC offset (CST/CDT)
+    local = generatedDateAndTime.astimezone(GEARBOX_TZ)
+    off = local.utcoffset() or timedelta(0)
+    total_minutes = int(off.total_seconds() // 60)
+    sign = "-" if total_minutes < 0 else "+"
+    hh = abs(total_minutes) // 60
+    mm = abs(total_minutes) % 60
+    central_local = local.strftime("%b %d, %Y, %I:%M %p ") + f"UTC{sign}{hh:02d}:{mm:02d}"
+
     metadata = {
         "version": "2",
         "description": "GitHub Alternate Source for Shift Codes",
         "attribution": "Data provided by https://mentalmars.com; https://www.polygon.com; https://www.ign.com; https://xsmashx88x.github.io",
         "permalink": PERMALINK,
-        "generated": {"human": generatedDateAndTime},
+        "generated": {
+            "utc_iso": utc_iso,
+            "epoch_ms": epoch_ms,
+            "central_local": central_local,
+        },
         "newcodecount": newcodecount,
     }
 

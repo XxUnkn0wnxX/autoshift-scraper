@@ -516,8 +516,15 @@ def print_targeted_report(details, stats, ref_dt, provided_expires, unmatched, i
     per_code_lines = []
     for d in details:
         per_code_lines.append(f"Code: {d['code']}")
-        # In targeted mode with --expires provided, show the NEW timestamp being written; otherwise show existing
-        exp_to_show = d['new_expires_display'] if provided_expires else d['expires_display']
+        # In print_targeted_report(...)
+        # When *setting* expiry (no --expires), show the exact stamp being written:
+        if provided_expires:
+            # keep existing behavior when user supplies --expires:
+            exp_to_show = d['new_expires_display']
+        else:
+            # targeted mode without --expires: show ISO | Central pair for ref_dt
+            exp_to_show = f"{ref_dt.isoformat()} | {format_central_with_offset(ref_dt)}"
+            
         per_code_lines.append(f"Expires: {exp_to_show}")
         per_code_lines.append(f"Will Set Expired: {d['will_set']}")
 

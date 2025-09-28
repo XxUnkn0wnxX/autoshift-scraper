@@ -49,11 +49,11 @@ python ./autoshift_scraper.py --user GITHUB_USERNAME --repo GITHUB_REPOSITORY_NA
 python ./autoshift_scraper.py --schedule 5 # redeem every 5 hours
 ```
 
-# Docker & Kubernetes Usage (updated)
+# Docker & Kubernetes Usage (local build only)
 
 ## Docker Use
 
-The scraper now supports environment-backed defaults for CLI flags. You can run it using only environment variables.
+The scraper supports environment-backed defaults for CLI flags. These instructions assume you **build the image locally** (no published image required).
 
 ### Environment variables
 
@@ -67,49 +67,83 @@ The scraper now supports environment-backed defaults for CLI flags. You can run 
 | `AUTOSHIFT_PERMALINK` | Override permalink written to metadata                                                | Defaults to public raw URL    |
 | `PARSER_ARGS`         | *(Optional)* Extra flags (e.g. `--verbose --file /autoshift/data/shiftcodes.json`)    | Prepended; CLI wins           |
 
+> **Note:** Replace `YOUR-USER` with your GitHub username (or org name) in the examples below.
+
 > **Persistence tip:** Mount a volume and point `SHIFTCODESJSONPATH` (or `--file`) into that mount so the file survives container restarts.
 
-### Example (published image)
+### Build the image locally
+
+```bash
+docker build -t autoshift-scraper:local .
+```
+
+### Run it (locally built image)
+
+**Persist output in a named volume:**
 
 ```bash
 docker run -d \
   --name autoshift-scraper \
   -v autoshift:/autoshift/data \
-  -e GITHUB_USER='ugoogalizer' \
-  -e GITHUB_REPO='autoshift-codes' \
-  -e GITHUB_TOKEN='github_pat_***' \
   -e SCHEDULE='2' \
   -e SHIFTCODESJSONPATH='/autoshift/data/shiftcodes.json' \
   -e PARSER_ARGS='--verbose' \
-  zacharmstrong/autoshift-scraper:latest
-```
-
-**Alternative:** keep `SHIFTCODESJSONPATH` unset and pass `--file` via `PARSER_ARGS` instead:
-
-```bash
--e PARSER_ARGS='--verbose --schedule 2 --file /autoshift/data/shiftcodes.json'
-```
-
-### Example (local build)
-
-```bash
-docker run -d \
-  --name autoshift-scraper \
-  -v autoshift:/autoshift/data \
-  -e GITHUB_USER='zacharmstrong' \
+  # Optional: set these to enable GitHub upload
+  -e GITHUB_USER='YOUR-USER' \\
   -e GITHUB_REPO='autoshift-codes' \
   -e GITHUB_TOKEN='github_pat_***' \
-  -e SCHEDULE='2' \
-  -e SHIFTCODESJSONPATH='/autoshift/data/shiftcodes.json' \
-  -e PARSER_ARGS='--verbose' \
-  localhost/autoshift-scraper:latest
+  autoshift-scraper:local
 ```
+
+**Run once without GitHub upload (writes to a host folder):**
+
+```bash
+mkdir -p out
+# macOS/Linux
+docker run --rm \
+  -v "$(pwd)/out:/data" \
+  -e SHIFTCODESJSONPATH='/data/shiftcodes.json' \
+  -e PARSER_ARGS='--verbose' \
+  autoshift-scraper:local
+```
+
+> **Windows PowerShell:** replace the volume flag with `-v "${PWD}\out:/data"` and create the folder via `New-Item -ItemType Directory -Force out`.
 
 ---
 
-## Kubernetes Use
+## Kubernetes Use (local image only)
 
-Example Deployment + PVC. Mount a path and either set `SHIFTCODESJSONPATH` to the mounted file or pass `--file` via `PARSER_ARGS`.
+Kubernetes pulls images from registries by default. To use a **locally built** image, load it into your local cluster and reference the same tag in your Deployment.
+
+### 1) Build the image
+
+```bash
+docker build -t autoshift-scraper:local .
+```
+
+### 2) Load it into your cluster
+
+**kind**
+
+```bash
+kind load docker-image autoshift-scraper:local
+```
+
+**minikube**
+
+```bash
+minikube image load autoshift-scraper:local
+```
+
+**k3d**
+
+```bash
+k3d image import autoshift-scraper:local --cluster <your-cluster-name>
+```
+
+> If you’re using another local distro, consult its docs for loading local images. The key is that the **cluster’s nodes** must have the image.
+
+### 3) Deploy (referencing the local tag)
 
 ```yaml
 --- # deployment
@@ -131,11 +165,11 @@ spec:
     spec:
       containers:
         - name: autoshift-scraper
-          image: zacharmstrong/autoshift-scraper:latest
-          imagePullPolicy: IfNotPresent
+          image: autoshift-scraper:local      # loaded into the cluster
+          imagePullPolicy: IfNotPresent       # or Never to forbid pulling
           env:
             - name: GITHUB_USER
-              value: "zarmstrong"
+              value: "YOUR-USER"  # <-- replace with your GitHub username
             - name: GITHUB_REPO
               value: "autoshift-codes"
             - name: GITHUB_TOKEN
@@ -190,7 +224,11 @@ kubectl get secret autoshift-scraper-secret \
   -o jsonpath="{.data.githubtoken}" | base64 -d; echo
 ```
 
-**PAT Scopes:** fine‑grained → Contents: Read & write (repo must be included); classic → `repo`. If your org uses SSO, make sure the token is approved for the repo.
+**Notes**
+
+* If your cluster nodes are **arm64** (e.g., Apple Silicon) build/load an arm64 image; for amd64 nodes, build/load amd64. Multi-arch images require a registry push.
+* `imagePullPolicy: Never` guarantees the kubelet will not attempt to pull (useful in fully offline setups).
+
 
 # Configuring GitHub connectivity
 

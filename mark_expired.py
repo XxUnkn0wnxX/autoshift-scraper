@@ -4,8 +4,8 @@ from datetime import datetime, timezone, timedelta
 from os import path
 import re as _re
 
-from github import Github
-from github.GithubException import UnknownObjectException
+from github import Github, InputGitTreeElement
+from github.GithubException import GithubException, UnknownObjectException
 
 # ---- Timezone for Gearbox (CST/CDT with DST) ----
 # WHY: Treat human-entered/website dates as America/Chicago local time,
@@ -23,31 +23,89 @@ SHIFTCODESJSONPATH = "data/shiftcodes.json"
 # -------------------------
 # GitHub upload helper
 # -------------------------
-def upload_shiftfile(filepath, user, repo_name, token, commit_msg=None):
-    """Upload or update shiftcodes.json in the specified GitHub repo (main branch)."""
+
+def upload_shiftfile(filepath, user, repo_name, token, commit_msg=None, branch=None):
+    """
+    Upload or update the JSON file to GitHub.
+
+    - Uses the basename of `filepath` as the destination path in the repo.
+    - Creates/updates on the repository's default branch (fallback: 'main').
+    - If the repository is empty, attempts to bootstrap the first commit.
+    """
     if not (user and repo_name and token):
         print("GitHub credentials incomplete; skipping upload.")
         return False
-    commit_msg = commit_msg or "Update shiftcodes.json via mark_expired.py"
+
+    dest_name = path.basename(filepath)  # e.g. "shiftcodes.json"
+    commit_msg = commit_msg or f"Update {dest_name} via mark_expired.py"
+
     with open(filepath, "rb") as f:
         content_bytes = f.read()
     content_str = content_bytes.decode("utf-8")
+
     try:
         g = Github(token)
         repo = g.get_repo(f"{user}/{repo_name}")
+
+        # Pick a branch: use default if available, else 'main'
+        if branch is None:
+            branch = (repo.default_branch or "main")
+
+        # Check if repo is empty (no branches)
         try:
-            contents = repo.get_contents("shiftcodes.json", ref="main")
-            repo.update_file(contents.path, commit_msg, content_str, contents.sha, branch="main")
-            print("Updated shiftcodes.json in repo.")
+            branches = list(repo.get_branches())
+            is_empty = (len(branches) == 0)
+        except GithubException:
+            # Some org repos return 404 for get_branches() before first commit
+            is_empty = True
+
+        if is_empty:
+            # First try the simplest path: Contents API can create the initial commit/branch
+            try:
+                repo.create_file(dest_name, commit_msg, content_str, branch=branch)
+                print(f"Bootstrapped {user}/{repo_name}@{branch} with {dest_name}.")
+                return True
+            except GithubException as e:
+                # Fallback to Git Data API manual bootstrap (blob -> tree -> commit -> ref)
+                try:
+                    blob = repo.create_git_blob(content_str, "utf-8")
+                    element = InputGitTreeElement(
+                        path=dest_name, mode="100644", type="blob", sha=blob.sha
+                    )
+                    tree = repo.create_git_tree([element])
+                    commit = repo.create_git_commit(commit_msg, tree, parents=[])
+                    repo.create_git_ref(ref=f"refs/heads/{branch}", sha=commit.sha)
+                    print(f"Bootstrapped empty repo and added {dest_name} to {user}/{repo_name}@{branch}.")
+                    return True
+                except Exception as inner:
+                    print("GitHub upload failed during empty-repo bootstrap:", inner)
+                    return False
+
+        # Not empty: try update, else create on the selected branch
+        try:
+            contents = repo.get_contents(dest_name, ref=branch)
+            repo.update_file(contents.path, commit_msg, content_str, contents.sha, branch=branch)
+            print(f"Updated {dest_name} in {user}/{repo_name}@{branch}.")
+            return True
         except UnknownObjectException:
-            # file doesn't exist; create it
-            repo.create_file("shiftcodes.json", commit_msg, content_str, branch="main")
-            print("Created shiftcodes.json in repo.")
-        return True
+            repo.create_file(dest_name, commit_msg, content_str, branch=branch)
+            print(f"Created {dest_name} in {user}/{repo_name}@{branch}.")
+            return True
+
+    except GithubException as e:
+        if e.status in (401, 403):
+            print(
+                "GitHub upload failed: auth/permission error.\n"
+                "- If using a fine-grained PAT: grant 'Contents: Read and write' and include this repository.\n"
+                "- If using a classic PAT: ensure the 'repo' scope is enabled.\n"
+                "- For org repos: make sure SSO/approval is completed for the token."
+            )
+        else:
+            print("GitHub upload failed:", e)
+        return False
     except Exception as e:
         print("GitHub upload failed:", e)
         return False
-
 
 # -------------------------
 # I/O helpers
@@ -702,10 +760,9 @@ def main():
     if changed_for_upload and args.user and args.repo and args.token:
         ok = upload_shiftfile(args.file, args.user, args.repo, args.token, commit_msg=commit_msg)
         if ok:
-            print("Uploaded updated shiftcodes.json to GitHub.")
+            print(f"Uploaded updated {path.basename(args.file)} to GitHub.")
         else:
             print("Upload attempt failed.")
-
 
 if __name__ == "__main__":
     main()

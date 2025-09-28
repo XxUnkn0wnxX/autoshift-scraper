@@ -16,6 +16,9 @@ from common import _L, DEBUG, DIRNAME, INFO
 # CHANGE: Allow environment override; CLI --file still takes precedence at runtime.
 SHIFTCODESJSONPATH = os.environ.get("SHIFTCODESJSONPATH", "data/shiftcodes.json")
 
+# CHANGE: Configurable permalink for metadata; override with AUTOSHIFT_PERMALINK env var.
+PERMALINK = os.environ.get("AUTOSHIFT_PERMALINK", "https://raw.githubusercontent.com/zarmstrong/autoshift-codes/main/shiftcodes.json")
+
 webpages = [
     {
         "game": "Borderlands 4",
@@ -438,8 +441,8 @@ def generateAutoshiftJSON(website_code_tables, previous_codes, include_expired):
     metadata = {
         "version": "2",
         "description": "GitHub Alternate Source for Shift Codes",
-        "attribution": "Data provided by https://mentalmars.com",
-        "permalink": "https://raw.githubusercontent.com/zarmstrong/autoshift-codes/main/shiftcodes.json",
+        "attribution": "Data provided by https://mentalmars.com; https://www.polygon.com; https://www.ign.com; https://xsmashx88x.github.io",
+        "permalink": PERMALINK,
         "generated": {"human": generatedDateAndTime},
         "newcodecount": newcodecount,
     }

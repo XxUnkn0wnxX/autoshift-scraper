@@ -668,7 +668,7 @@ def main():
         description=(
             "Mark SHiFT codes expired in data/shiftcodes.json.\n"
             "- With CODE(s): targeted update. If --expires ISO is provided: overwrite only the 'expires' field.\n"
-            "  If --expires is omitted: set 'expires' to current UTC and 'expired'=true for the matched codes.\n"
+            "  If --expires is omitted: set 'expires' to the current time in America/Chicago (converted to UTC) and 'expired'=true for the matched codes.\n"
             "- With no CODE: bulk sweep sets 'expired'=true for entries whose existing 'expires' < reference time."
         )
     )

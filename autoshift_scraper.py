@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from os import path, makedirs
 from pathlib import Path
+import shlex, sys
 
 from github import Github, InputGitTreeElement
 from github.GithubException import GithubException, UnknownObjectException
@@ -572,6 +573,7 @@ def setup_argparser():
         type=str,
         const="2",
         nargs="?",
+        default=os.environ.get("SCHEDULE"),
         help="Schedule interval. Append 'm' for minutes (e.g. '30m') otherwise treated as hours (e.g. '2' or '1.5').",
     )
     parser.add_argument(
@@ -587,17 +589,20 @@ def setup_argparser():
     parser.add_argument(
         "-u",
         "--user",
-        default=None,
+        default=os.environ.get("GITHUB_USER"),
         help=("GitHub Username that hosts the repo to push into"),
     )
     parser.add_argument(
         "-r",
         "--repo",
-        default=None,
+        default=os.environ.get("GITHUB_REPO"),
         help=("GitHub Repository to push the shiftcodes into (i.e. autoshift-codes)"),
     )
     parser.add_argument(
-        "-t", "--token", default=None, help=("GitHub Authentication token to use ")
+        "-t",
+        "--token",
+        default=os.environ.get("GITHUB_TOKEN"),
+        help=("GitHub Authentication token to use "),
     )
     
     parser.add_argument(
@@ -1229,7 +1234,14 @@ if __name__ == "__main__":
 
     # build argument parser
     parser = setup_argparser()
-    args = parser.parse_args()
+
+    # Allow env-provided extra flags (PARSER_ARGS). Prepend so CLI overrides env.
+    extra = os.environ.get("PARSER_ARGS")
+    if extra:
+        argv = shlex.split(extra) + sys.argv[1:]
+        args = parser.parse_args(argv)
+    else:
+        args = parser.parse_args()
 
     # Setup the logger
     _L.setLevel(INFO)

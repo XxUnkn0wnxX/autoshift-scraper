@@ -1,3 +1,5 @@
+# CHANGE: Needed at module import time because SHIFTCODESJSONPATH reads os.environ.
+import os
 import requests
 from bs4 import BeautifulSoup
 import json, base64
@@ -6,11 +8,13 @@ from datetime import datetime, timezone
 from os import path, makedirs
 from pathlib import Path
 
-from github import Github
+from github import Github, InputGitTreeElement
+from github.GithubException import GithubException, UnknownObjectException
 
 from common import _L, DEBUG, DIRNAME, INFO
 
-SHIFTCODESJSONPATH = "data/shiftcodes.json"
+# CHANGE: Allow environment override; CLI --file still takes precedence at runtime.
+SHIFTCODESJSONPATH = os.environ.get("SHIFTCODESJSONPATH", "data/shiftcodes.json")
 
 webpages = [
     {
@@ -121,10 +125,13 @@ def cleanse_codes(codes):
         clean_code = remap_dict_keys(code)
 
         # Clean up text from expiry date
+        # CHANGE: Guard .replace() in case the cell isn’t a string or is missing.
         if "expires" in clean_code:
-            clean_code.update(
-                {"expires": clean_code.get("expires").replace("Expires: ", "")}
-            )
+            exp_val = clean_code.get("expires")
+            if isinstance(exp_val, str):
+                clean_code.update({"expires": exp_val.replace("Expires: ", "")})
+            else:
+                clean_code.update({"expires": "Unknown"})
         else:
             clean_code.update({"expires": "Unknown"})
 
@@ -153,7 +160,14 @@ def scrape_codes(webpage):
         + ": "
         + webpage.get("sourceURL")
     )
-    r = requests.get(webpage.get("sourceURL"))
+    # CHANGE: Add timeout + user-agent to avoid hangs/blocks; raise for non-2xx to fail fast.
+    r = requests.get(
+        webpage.get("sourceURL"),
+        timeout=15,
+        headers={"User-Agent": "autoshift-scraper/1.0"}
+    )
+    r.raise_for_status()
+
     # record the time we scraped the URL
     scrapedDateAndTime = datetime.now(timezone.utc)
     _L.info(" Collected at: " + str(scrapedDateAndTime))
@@ -194,27 +208,35 @@ def scrape_codes(webpage):
         if webpage.get("platform_ordered_tables")[table_count] == "discard":
             table_count += 1
             continue
-
+        
+        # CHANGE: Some <figure> blocks may not contain a table; skip them to avoid AttributeError.
+        # NOTE: We do NOT increment table_count here so platform mapping stays aligned to tables.   
         table_html = figure.find(lambda tag: tag.name == "table")
+        if table_html is None:
+            _L.debug(" Figure had no <table>; skipping figure")
+            continue
 
         table_header = []
         code_table = []
 
         # Convert the HTML table into a Python Dict:
         # Tip from: https://stackoverflow.com/questions/11901846/beautifulsoup-a-dictionary-from-an-html-table
+        # CHANGE: Synthesize "expired" header (for <s> tags), and tolerate missing <tbody>.
         table_header = [header.text for header in table_html.find_all("th")]
         table_header.append(
             "expired"
         )  # expired codes have a strikethrough ('s') tag and are found last
+        
+        # CHANGE: Some tables don’t include <tbody>; fall back to the table element itself.
+        tbody = table_html.find("tbody") or table_html
         code_table = [
             {
                 table_header[i]: cell.text
                 for i, cell in enumerate(row.find_all({"td", "s"}))
             }
-            for row in table_html.find("tbody").find_all("tr")
+            for row in tbody.find_all("tr")
         ]
-
-        # If we find more tables on the webpage than we were expecting, error
+        
         if table_count + 1 > len(webpage.get("platform_ordered_tables")):
             _L.error("ERROR: There are more tables on the webpage than configured")
             # TODO _L.error("ERROR: Unexpected table has headings of: " + header)
@@ -548,6 +570,13 @@ def setup_argparser():
     parser.add_argument(
         "-t", "--token", default=None, help=("GitHub Authentication token to use ")
     )
+    
+    parser.add_argument(
+        "--file",
+        default=SHIFTCODESJSONPATH,
+        help="Path to output shiftcodes.json (default: data/shiftcodes.json)",
+    )
+
     return parser
 
 
@@ -937,12 +966,99 @@ def parse_schedule_arg(schedule_str):
         except Exception:
             return None
 
+# NEW: Robust GitHub uploader that:
+# - Bootstraps empty repositories (first commit) via Contents API with Git Data API fallback.
+# - Updates existing files or creates them if missing.
+# - Uses repo.default_branch when available, falling back to 'main'.
+def upload_shiftfile(filepath, user, repo_name, token, commit_msg=None, branch=None):
+    """
+    Upload or update the JSON file to GitHub.
+
+    - Uses the basename of `filepath` as the destination path in the repo.
+    - Creates/updates on the repository's default branch (fallback: 'main').
+    - If the repository is empty, attempts to bootstrap the first commit.
+    """
+    if not (user and repo_name and token):
+        print("GitHub credentials incomplete; skipping upload.")
+        return False
+
+    dest_name = path.basename(filepath)  # e.g. "shiftcodes.json"
+    commit_msg = commit_msg or f"Update {dest_name} via auto_scraper.py"
+
+    with open(filepath, "rb") as f:
+        content_bytes = f.read()
+    content_str = content_bytes.decode("utf-8")
+
+    try:
+        g = Github(token)
+        repo = g.get_repo(f"{user}/{repo_name}")
+
+        # Pick a branch: use default if available, else 'main'
+        if branch is None:
+            branch = (repo.default_branch or "main")
+
+        # Check if repo is empty (no branches)
+        try:
+            branches = list(repo.get_branches())
+            is_empty = (len(branches) == 0)
+        except GithubException:
+            # Some org repos return 404 for get_branches() before first commit
+            is_empty = True
+
+        if is_empty:
+            # First try: Contents API can create the initial commit/branch
+            try:
+                repo.create_file(dest_name, commit_msg, content_str, branch=branch)
+                print(f"Bootstrapped {user}/{repo_name}@{branch} with {dest_name}.")
+                return True
+            except GithubException:
+                # Fallback: Git Data API (blob -> tree -> commit -> ref)
+                try:
+                    blob = repo.create_git_blob(content_str, "utf-8")
+                    element = InputGitTreeElement(
+                        path=dest_name, mode="100644", type="blob", sha=blob.sha
+                    )
+                    tree = repo.create_git_tree([element])
+                    commit = repo.create_git_commit(commit_msg, tree, parents=[])
+                    repo.create_git_ref(ref=f"refs/heads/{branch}", sha=commit.sha)
+                    print(f"Bootstrapped empty repo and added {dest_name} to {user}/{repo_name}@{branch}.")
+                    return True
+                except Exception as inner:
+                    print("GitHub upload failed during empty-repo bootstrap:", inner)
+                    return False
+
+        # Not empty: try update, else create on the selected branch
+        try:
+            contents = repo.get_contents(dest_name, ref=branch)
+            repo.update_file(contents.path, commit_msg, content_str, contents.sha, branch=branch)
+            print(f"Updated {dest_name} in {user}/{repo_name}@{branch}.")
+            return True
+        except UnknownObjectException:
+            repo.create_file(dest_name, commit_msg, content_str, branch=branch)
+            print(f"Created {dest_name} in {user}/{repo_name}@{branch}.")
+            return True
+
+    except GithubException as e:
+        if e.status in (401, 403):
+            print(
+                "GitHub upload failed: auth/permission error.\n"
+                "- If using a fine-grained PAT: grant 'Contents: Read and write' and include this repository.\n"
+                "- If using a classic PAT: ensure the 'repo' scope is enabled.\n"
+                "- For org repos: make sure SSO/approval is completed for the token."
+            )
+        else:
+            print("GitHub upload failed:", e)
+        return False
+    except Exception as e:
+        print("GitHub upload failed:", e)
+        return False
 
 def main(args):
 
-    # Setup json output folder
-    makedirs(path.join(DIRNAME, "data"), exist_ok=True)
-    Path("data/shiftcodes.json").touch()
+    # CHANGE: Respect --file (or env-backed default) for both writing and uploading.
+    shiftfile_path = args.file
+    makedirs(path.dirname(shiftfile_path) or ".", exist_ok=True)
+    Path(shiftfile_path).touch()
 
     # print(json.dumps(webpages,indent=2, default=str))
     codes_inc_expired = []
@@ -950,7 +1066,7 @@ def main(args):
     code_tables = []
 
     # Read in the previous codes so we can retain timestamps and know how many are new
-    with open(SHIFTCODESJSONPATH, "rb") as f:
+    with open(shiftfile_path, "rb") as f:
         try:
             previous_codes = json.loads(f.read())
         except:
@@ -958,7 +1074,7 @@ def main(args):
             pass
     # Run any migrations on the previous codes file to bring it up to date
     previous_codes, migration_performed = run_migrations_on_shiftfile(
-        SHIFTCODESJSONPATH, previous_codes
+        shiftfile_path, previous_codes
     )
 
     # Scrape the source webpage into a normalised Dictionary
@@ -1058,53 +1174,29 @@ def main(args):
     )
 
     # Write out the file even if no new codes so we can track last scrape time
-    with open(SHIFTCODESJSONPATH, "w") as write_file:
+    with open(shiftfile_path, "w") as write_file:
         json.dump(codes_inc_expired, write_file, indent=2, default=str)
 
-    # Commit the new file to GitHub publically if the args are set:
+    # CHANGE: Only upload if there are new codes or a migration occurred; keep original commit messages.
+    # Uses robust upload_shiftfile() to handle empty repos, default branch discovery, and create/update.
     if args.user and args.repo and args.token:
-        # Only commit if there are new codes or if a migration was performed
-        if (
-            codes_inc_expired[0].get("meta").get("newcodecount") > 0
-            or migration_performed
-        ):
-            _L.info("Connecting to GitHub repo: " + args.user + "/" + args.repo)
-            # Connect to GitHub
-            file_path = SHIFTCODESJSONPATH
-            g = Github(args.token)
-            repo = g.get_repo(args.user + "/" + args.repo)
-
-            # Read in the latest file
-            _L.info("Read in shiftcodes file")
-            with open(file_path, "rb") as f:
-                file_to_commit = f.read()
-
-            # Push to GitHub:
-            _L.info("Push and Commit")
-            contents = repo.get_contents(
-                "shiftcodes.json", ref="main"
-            )  # Retrieve old file to get its SHA and path
+        if (codes_inc_expired[0].get("meta").get("newcodecount") > 0) or migration_performed:
+            # Preserve original commit message logic
             commit_msg = (
                 "added new codes"
                 if codes_inc_expired[0].get("meta").get("newcodecount") > 0
                 else "migrated shiftcodes file"
             )
-            commit_return = repo.update_file(
-                contents.path,
-                commit_msg,
-                file_to_commit,
-                contents.sha,
-                branch="main",
-            )  # Add, commit and push branch
-            _L.info("GitHub result: " + str(commit_return))
+            ok = upload_shiftfile(shiftfile_path, args.user, args.repo, args.token, commit_msg=commit_msg)
+            if ok:
+                _L.info(f"Uploaded updated {path.basename(shiftfile_path)} to GitHub.")
+            else:
+                _L.error("Upload attempt failed.")
         else:
-            _L.info(
-                "Not committing to GitHub as there are no new codes and no migration."
-            )
+            _L.info("Not committing to GitHub as there are no new codes and no migration.")
 
 
 if __name__ == "__main__":
-    import os
 
     # build argument parser
     parser = setup_argparser()

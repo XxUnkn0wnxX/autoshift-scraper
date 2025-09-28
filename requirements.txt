@@ -23,3 +23,4 @@ tzlocal==5.0.1
 urllib3==2.0.5
 webencodings==0.5.1
 wrapt==1.15.0
+backports.zoneinfo==0.2.1; python_version < "3.9"

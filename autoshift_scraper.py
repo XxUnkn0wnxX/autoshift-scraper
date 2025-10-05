@@ -115,6 +115,7 @@ _SANITIZED_FIELDS = (
 
 
 def _sanitize_text_field(value):
+    # DEV NOTE: Keep output canonical by removing markup/entities so dedupe logic and JSON writes share the same text.
     if not isinstance(value, str):
         return value
 
@@ -235,6 +236,7 @@ def scrape_codes(webpage):
     for figure in figures:
         table_html = figure.find(lambda tag: tag.name == "table")
         if table_html is None:
+            # DEV NOTE: MentalMars BL4 embeds decorative figures (e.g. header images) — ignore them so counting stays stable.
             _L.debug(" Figure had no <table>; skipping figure")
             continue
         table_html_blocks.append(table_html)
@@ -386,8 +388,7 @@ def generateAutoshiftJSON(website_code_tables, previous_codes, include_expired):
                     # skip rows that do not contain a valid code
                     continue
 
-                # Normalise the parsed code and its related string fields in-place so
-                # dedupe checks observe the same cleaned values that we persist.
+                # DEV NOTE: Normalise the parsed code and related strings in-place so repeated runs reuse identical values.
                 code["code"] = raw_code
                 if "reward" in code:
                     code["reward"] = _sanitize_text_field(code.get("reward"))

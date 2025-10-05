@@ -21,12 +21,6 @@ Instead of publishing this as part of [Fabbi's autoshift](https://github.com/Fab
 
   > With a direct link [here](https://raw.githubusercontent.com/zarmstrong/autoshift-codes/refs/heads/main/shiftcodes.json)
 
-## Developer Notes
-
-- `autoshift_scraper.py` sanitises every field before serialization via `_sanitize_text_field`. The same cleaned values are written back to the in-memory row so dedupe checks don’t flag the same code on every run.
-- MentalMars occasionally wraps the Borderlands 4 table in decorative `<figure>` elements without `<table>` tags. The scraper now filters non-table figures before counting, so expect log output such as `Collected tables: 1 (from 2 <figure> blocks)` with no warnings.
-- Local pytest environments that have both `pytest-recording` and `pytest-vcr` installed will raise a startup error. Either uninstall one plugin or run tests via `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest` (the suite assumes the latter by default).
-
 ## Intent
 
 This script has been setup with the intent that other webpages could be scraped. The Python Dictionary `webpages` can be used to customise the webpage, the tables and their contents. This may need adjusting as mentalmars' website updates over time.

@@ -231,38 +231,42 @@ def scrape_codes(webpage):
     #    /html/body/div[2]/div/div[4]/div[1]/div/div/article/div[5]/figure[2]/table/
     figures = soup.find_all("figure")
 
-    _L.info(" Expecting tables: " + str(len(webpage.get("platform_ordered_tables"))))
-    _L.info(" Collected tables: " + str(len(figures)))
+    table_html_blocks = []
+    for figure in figures:
+        table_html = figure.find(lambda tag: tag.name == "table")
+        if table_html is None:
+            _L.debug(" Figure had no <table>; skipping figure")
+            continue
+        table_html_blocks.append(table_html)
+
+    platforms = webpage.get("platform_ordered_tables")
+    _L.info(" Expecting tables: " + str(len(platforms)))
+    _L.info(
+        " Collected tables: "
+        + str(len(table_html_blocks))
+        + (" (from " + str(len(figures)) + " <figure> blocks)" if DEBUG else "")
+    )
 
     # headers = []
     code_tables = []
 
     table_count = 0
-    for figure in figures:
-        # Prevent IndexError if there are more figures than expected
-        if table_count >= len(webpage.get("platform_ordered_tables")):
+    for table_html in table_html_blocks:
+        # Prevent IndexError if there are more tables than expected
+        if table_count >= len(platforms):
             _L.warning(
-                f"More tables found ({len(figures)}) than expected ({len(webpage.get('platform_ordered_tables'))}) for {webpage.get('game')}. Skipping extra tables."
+                f"More tables found ({len(table_html_blocks)}) than expected ({len(platforms)}) for {webpage.get('game')}. Skipping extra tables."
             )
             break
 
+        platform = platforms[table_count]
         _L.info(
-            " Parsing for table #"
-            + str(table_count)
-            + " - "
-            + webpage.get("platform_ordered_tables")[table_count]
+            " Parsing for table #" + str(table_count) + " - " + platform
         )
 
         # Don't parse any tables marked to discard
-        if webpage.get("platform_ordered_tables")[table_count] == "discard":
+        if platform == "discard":
             table_count += 1
-            continue
-        
-        # CHANGE: Some <figure> blocks may not contain a table; skip them to avoid AttributeError.
-        # NOTE: We do NOT increment table_count here so platform mapping stays aligned to tables.   
-        table_html = figure.find(lambda tag: tag.name == "table")
-        if table_html is None:
-            _L.debug(" Figure had no <table>; skipping figure")
             continue
 
         table_header = []

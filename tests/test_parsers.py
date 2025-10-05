@@ -60,6 +60,7 @@ def test_scrape_polygon_bl4_codes_valid(monkeypatch):
             pass
 
     def dummy_get(url, timeout=15, **kwargs):
+        # DEV NOTE: Production scraper passes headers/timeouts; keep kwargs so tests mirror that signature.
         return DummyResp(html)
 
     import autoshift_scraper
@@ -89,6 +90,7 @@ def test_scrape_polygon_bl4_codes_duplicates(monkeypatch):
             pass
 
     def dummy_get(url, timeout=15, **kwargs):
+        # DEV NOTE: allow **kwargs so mocked requests.get accepts headers from the real scraper.
         return DummyResp(html)
 
     import autoshift_scraper
@@ -111,6 +113,7 @@ def test_scrape_polygon_bl4_codes_missing_h2(monkeypatch):
             pass
 
     def dummy_get(url, timeout=15, **kwargs):
+        # DEV NOTE: maintain kwargs parity with requests.get; tables may request headers in real flow.
         return DummyResp(html)
 
     import autoshift_scraper
@@ -131,6 +134,7 @@ def test_scrape_polygon_bl4_codes_missing_ul(monkeypatch):
             pass
 
     def dummy_get(url, timeout=15, **kwargs):
+        # DEV NOTE: tests emulate requests.get so accept kwargs for headers etc.
         return DummyResp(html)
 
     import autoshift_scraper

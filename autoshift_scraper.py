@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import json, base64
 import re
+import html
 from datetime import datetime, timezone, timedelta
 from os import path, makedirs
 from pathlib import Path
@@ -97,6 +98,42 @@ webpages = [
         "platform_ordered_tables": ["universal", "universal", "universal"],
     },
 ]
+
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_CONTROL_CHAR_RE = re.compile(r"[\u0000-\u001F\u007F]")
+_SANITIZED_FIELDS = (
+    "code",
+    "type",
+    "game",
+    "platform",
+    "reward",
+    "archived",
+    "expires",
+    "link",
+)
+
+
+def _sanitize_text_field(value):
+    if not isinstance(value, str):
+        return value
+
+    # Remove HTML tags then decode HTML entities so characters like &amp; collapse to '&'.
+    text = _HTML_TAG_RE.sub("", value)
+    text = html.unescape(text)
+    # Normalise whitespace and strip stray control characters that slip through.
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"[\t\r\n]+", " ", text)
+    text = _CONTROL_CHAR_RE.sub("", text)
+    return text.strip()
+
+
+def _sanitize_autoshift_entry(entry):
+    sanitized = dict(entry)
+    for field in _SANITIZED_FIELDS:
+        if field in sanitized:
+            sanitized[field] = _sanitize_text_field(sanitized[field])
+    return sanitized
 
 
 def remap_dict_keys(dict_keys):
@@ -405,44 +442,50 @@ def generateAutoshiftJSON(website_code_tables, previous_codes, include_expired):
 
                 if code_table.get("platform") == "pc":
                     autoshiftcodes.append(
-                        {
-                            "code": code.get("code"),
-                            "type": "shift",
-                            "game": code_table.get("game"),
-                            "platform": "steam",
-                            "reward": code.get("reward"),
-                            "archived": archived,
-                            "expires": code.get("expires"),
-                            "expired": code.get("expired"),
-                            "link": code_table.get("sourceURL"),
-                        }
+                        _sanitize_autoshift_entry(
+                            {
+                                "code": code.get("code"),
+                                "type": "shift",
+                                "game": code_table.get("game"),
+                                "platform": "steam",
+                                "reward": code.get("reward"),
+                                "archived": archived,
+                                "expires": code.get("expires"),
+                                "expired": code.get("expired"),
+                                "link": code_table.get("sourceURL"),
+                            }
+                        )
                     )
                     autoshiftcodes.append(
-                        {
-                            "code": code.get("code"),
-                            "type": "shift",
-                            "game": code_table.get("game"),
-                            "platform": "epic",
-                            "reward": code.get("reward"),
-                            "archived": archived,
-                            "expires": code.get("expires"),
-                            "expired": code.get("expired"),
-                            "link": code_table.get("sourceURL"),
-                        }
+                        _sanitize_autoshift_entry(
+                            {
+                                "code": code.get("code"),
+                                "type": "shift",
+                                "game": code_table.get("game"),
+                                "platform": "epic",
+                                "reward": code.get("reward"),
+                                "archived": archived,
+                                "expires": code.get("expires"),
+                                "expired": code.get("expired"),
+                                "link": code_table.get("sourceURL"),
+                            }
+                        )
                     )
                 else:
                     autoshiftcodes.append(
-                        {
-                            "code": code.get("code"),
-                            "type": "shift",
-                            "game": code_table.get("game"),
-                            "platform": code_table.get("platform"),
-                            "reward": code.get("reward"),
-                            "archived": archived,
-                            "expires": code.get("expires"),
-                            "expired": code.get("expired"),
-                            "link": code_table.get("sourceURL"),
-                        }
+                        _sanitize_autoshift_entry(
+                            {
+                                "code": code.get("code"),
+                                "type": "shift",
+                                "game": code_table.get("game"),
+                                "platform": code_table.get("platform"),
+                                "reward": code.get("reward"),
+                                "archived": archived,
+                                "expires": code.get("expires"),
+                                "expired": code.get("expired"),
+                                "link": code_table.get("sourceURL"),
+                            }
+                        )
                     )
 
     # Add the metadata section (machine- and human-friendly stamps)

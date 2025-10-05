@@ -59,7 +59,7 @@ def test_scrape_polygon_bl4_codes_valid(monkeypatch):
         def raise_for_status(self):
             pass
 
-    def dummy_get(url, timeout=15):
+    def dummy_get(url, timeout=15, **kwargs):
         return DummyResp(html)
 
     import autoshift_scraper
@@ -88,7 +88,7 @@ def test_scrape_polygon_bl4_codes_duplicates(monkeypatch):
         def raise_for_status(self):
             pass
 
-    def dummy_get(url, timeout=15):
+    def dummy_get(url, timeout=15, **kwargs):
         return DummyResp(html)
 
     import autoshift_scraper
@@ -110,7 +110,7 @@ def test_scrape_polygon_bl4_codes_missing_h2(monkeypatch):
         def raise_for_status(self):
             pass
 
-    def dummy_get(url, timeout=15):
+    def dummy_get(url, timeout=15, **kwargs):
         return DummyResp(html)
 
     import autoshift_scraper
@@ -130,7 +130,7 @@ def test_scrape_polygon_bl4_codes_missing_ul(monkeypatch):
         def raise_for_status(self):
             pass
 
-    def dummy_get(url, timeout=15):
+    def dummy_get(url, timeout=15, **kwargs):
         return DummyResp(html)
 
     import autoshift_scraper

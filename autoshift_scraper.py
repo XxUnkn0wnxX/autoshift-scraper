@@ -382,6 +382,14 @@ def generateAutoshiftJSON(website_code_tables, previous_codes, include_expired):
                     # skip rows that do not contain a valid code
                     continue
 
+                # Normalise the parsed code and its related string fields in-place so
+                # dedupe checks observe the same cleaned values that we persist.
+                code["code"] = raw_code
+                if "reward" in code:
+                    code["reward"] = _sanitize_text_field(code.get("reward"))
+                if "expires" in code:
+                    code["expires"] = _sanitize_text_field(code.get("expires"))
+
                 # Skip the code if its expired and we're not to include expired
                 if not include_expired and code.get("expired"):
                     continue

@@ -27,7 +27,7 @@ GEARBOX_TZ = ZoneInfo("America/Chicago")
 SHIFTCODESJSONPATH = os.environ.get("SHIFTCODESJSONPATH", "data/shiftcodes.json")
 
 # CHANGE: Configurable permalink for metadata; override with AUTOSHIFT_PERMALINK env var.
-PERMALINK = os.environ.get("AUTOSHIFT_PERMALINK", "https://raw.githubusercontent.com/zarmstrong/autoshift-codes/main/shiftcodes.json")
+PERMALINK = os.environ.get("AUTOSHIFT_PERMALINK", "https://raw.githubusercontent.com/XxUnkn0wnxX/autoshift-codes/main/shiftcodes.json")
 
 webpages = [
     {

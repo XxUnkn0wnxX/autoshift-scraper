@@ -1222,20 +1222,20 @@ def main(args):
             existing_codes_set.add(code_val.upper())
 
     # log the invocation from main so it's visible in the main flow
-    # _L.info("Invoking IGN BL4 parser")
-    # ign_bl4_codes = scrape_ign_bl4_codes(existing_codes_set)
-    # if ign_bl4_codes:
-    #     for code_table_list in code_tables:
-    #         for code_table in code_table_list:
-    #             if (
-    #                 code_table.get("game") == "Borderlands 4"
-    #                 and code_table.get("platform") == "universal"
-    #             ):
-    #                 code_table["codes"].extend(ign_bl4_codes)
-    #                 _L.info(
-    #                     f"IGN BL4: Added {len(ign_bl4_codes)} codes to Borderlands 4 universal"
-    #                 )
-    #                 break
+    _L.info("Invoking IGN BL4 parser")
+    ign_bl4_codes = scrape_ign_bl4_codes(existing_codes_set)
+    if ign_bl4_codes:
+        for code_table_list in code_tables:
+            for code_table in code_table_list:
+                if (
+                    code_table.get("game") == "Borderlands 4"
+                    and code_table.get("platform") == "universal"
+                ):
+                    code_table["codes"].extend(ign_bl4_codes)
+                    _L.info(
+                        f"IGN BL4: Added {len(ign_bl4_codes)} codes to Borderlands 4 universal"
+                    )
+                    break
 
         # Re-generate the output JSONs with the new codes included
         codes_inc_expired = generateAutoshiftJSON(code_tables, previous_codes, True)

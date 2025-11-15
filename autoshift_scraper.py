@@ -889,10 +889,10 @@ def scrape_ign_bl4_codes(existing_codes_set):
 
 def scrape_xsmash_codes(existing_codes_set):
     """
-    Parse xsmashx88x Shift-Codes gh-pages index.html for SHiFT codes by extracting the
+    Parse xsmashx88x Shift-Codes GitHub Pages HTML for SHiFT codes by extracting the
     ALL_CODES_CONFIG JavaScript array. Returns list of dicts: {code, reward, expires, expired}.
     """
-    url = "https://raw.githubusercontent.com/xsmashx88x/Shift-Codes/refs/heads/gh-pages/index.html"
+    url = "https://xsmashx88x.github.io/Shift-Codes/"
     try:
         _L.info("Requesting xsmashx88x Shift-Codes page: " + url)
         r = requests.get(
@@ -937,6 +937,7 @@ def scrape_xsmash_codes(existing_codes_set):
             if not code:
                 continue
             code = code.strip().upper()
+            entry_text = em.group(0)
 
             # skip if already present
             if code in existing_codes_set:
@@ -972,7 +973,19 @@ def scrape_xsmash_codes(existing_codes_set):
                     reward = raw_title
 
             # parse expires createDate args if present
-            expires_raw = em.group("expires")
+            expires_raw = None
+            literal_expire = None
+            expire_match = re.search(
+                r"(?<![A-Za-z0-9_])expires\s*:\s*(?:createDate\((?P<cd>[^)]*)\)|(?P<literal>\"[^\"]*\"|'[^']*'|[A-Za-z0-9_]+))",
+                entry_text,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if expire_match:
+                if expire_match.group("cd"):
+                    expires_raw = expire_match.group("cd")
+                else:
+                    literal_expire = expire_match.group("literal")
+
             expires_str = "Unknown"
             expired_flag = False
             if expires_raw:
@@ -990,6 +1003,21 @@ def scrape_xsmash_codes(existing_codes_set):
                     hour = nums_int[3] if len(nums_int) > 3 else 0
                     minute = nums_int[4] if len(nums_int) > 4 else 0
                     second = nums_int[5] if len(nums_int) > 5 else 0
+                    is_pm_flag = None
+                    if len(nums) > 6:
+                        indicator_raw = nums[6].strip().lower()
+                        if indicator_raw in {"true", "false"}:
+                            is_pm_flag = indicator_raw == "true"
+                        else:
+                            try:
+                                is_pm_flag = float(indicator_raw) != 0.0
+                            except Exception:
+                                is_pm_flag = None
+                    if is_pm_flag is not None:
+                        if is_pm_flag and hour < 12:
+                            hour += 12
+                        elif not is_pm_flag and hour == 12:
+                            hour = 0
                     # sanity: clamp month to 1..12; if month==0 assume 0-indexed and add 1
                     if month == 0:
                         month = 1
@@ -1007,6 +1035,10 @@ def scrape_xsmash_codes(existing_codes_set):
                         expires_str = expires_raw.strip()
                 except Exception:
                     expires_str = expires_raw.strip()
+            elif literal_expire:
+                literal_expire = literal_expire.strip().strip("\"'")
+                if literal_expire:
+                    expires_str = literal_expire
 
             candidates.append(
                 {
